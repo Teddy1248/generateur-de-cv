@@ -197,12 +197,6 @@ h2 {
     box-shadow: 0 14px 28px rgba(15, 39, 71, 0.10);
 }
 
-.theme-bleu::before { background: linear-gradient(135deg, #dff5ff, #8edcff, #4fb9f5); }
-.theme-rouge::before { background: linear-gradient(135deg, #ffe5e8, #ffb8c2, #ff7f92); }
-.theme-orange::before { background: linear-gradient(135deg, #fff0dd, #ffd0a3, #ffab66); }
-.theme-rose::before { background: linear-gradient(135deg, #ffe8f6, #ffc4e4, #f48cc5); }
-.theme-jaune::before { background: linear-gradient(135deg, #fff8d8, #ffe98f, #ffd84f); }
-.theme-vert::before { background: linear-gradient(135deg, #e4fbeb, #b8efc8, #78daa0); }
 
 textarea.form-control {
     min-height: 98px;
@@ -479,3 +473,50 @@ textarea.form-control {
         margin-right: 0;
     }
 }
+
+/* Extensions : mêmes cartes, mêmes contrôles, sans nouvelle dépendance. */
+.theme-choice::before { background: linear-gradient(135deg, var(--pastille-claire), var(--pastille-milieu), var(--pastille)); }
+.theme-choice:focus-within { outline: 3px solid #1e88e5; outline-offset: 2px; }
+.preview-card [id="previsualisation_description"],
+.preview-item > p:last-child { white-space: pre-line; }
+
+/* Les six nouveaux modèles ont une structure linéaire. */
+.mode-ats .preview-layout,
+.modele-epure .preview-layout,
+.modele-elegant .preview-layout,
+.modele-professionnel .preview-layout,
+.modele-compact .preview-layout,
+.modele-academique .preview-layout,
+.modele-essentiel .preview-layout {
+    display: flex; flex-direction: column; gap: 20px; border: 0; border-radius: 0;
+}
+.mode-ats .preview-main,
+.modele-epure .preview-main,
+.modele-elegant .preview-main,
+.modele-professionnel .preview-main,
+.modele-compact .preview-main,
+.modele-academique .preview-main,
+.modele-essentiel .preview-main { order: -1; }
+.mode-ats .preview-sidebar, .mode-ats .preview-main { padding: 0; background: #fff; }
+.mode-ats .photo-preview { display: none; }
+.preview-card h2, .preview-name { letter-spacing: normal; }
+
+.modele-epure .preview-top { padding: 4px 0 14px; border-radius: 0; border-bottom: 3px solid var(--couleur-cv); background: white; }
+.modele-epure h2 { border: 0; }
+.modele-elegant .preview-top { border-left: 5px solid var(--couleur-cv-texte); border-radius: 0; background: var(--couleur-cv-clair); }
+.modele-elegant .preview-name { font-family: Georgia, serif; }
+.modele-professionnel .preview-top { border-radius: 0; border-top: 6px solid var(--couleur-cv-texte); background: var(--couleur-cv-clair); }
+.modele-professionnel h2 { padding: 5px 8px; border: 0; background: var(--couleur-cv-clair); }
+.modele-compact .preview-top { padding: 12px 15px; }
+.modele-compact .preview-name { font-size: 1.65rem; }
+.modele-compact p, .modele-compact li { font-size: .88rem; line-height: 1.3; }
+.modele-compact h2 { margin-top: 14px; margin-bottom: 5px; }
+.modele-compact .preview-item { margin-bottom: 6px; padding-bottom: 4px; }
+.modele-academique .preview-top { padding: 4px 0 14px; border-radius: 0; border-bottom: 2px solid var(--couleur-cv-texte); background: white; }
+.modele-academique .preview-name { font-family: Georgia, serif; }
+.modele-academique h2 { border-bottom: 2px solid var(--couleur-cv-texte); }
+.modele-essentiel .preview-top { padding: 4px 0 14px 15px; border-radius: 0; border-left: 4px solid var(--couleur-cv); background: white; }
+.modele-essentiel h2 { padding-left: 9px; border: 0; border-left: 3px solid var(--couleur-cv); }
+
+/* Les noms de couleur plus longs restent dans leur carte, même sur mobile. */
+.theme-grid { grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); }

@@ -1,15 +1,21 @@
 <?php
 require __DIR__ . '/vendor/autoload.php';
+require __DIR__ . '/config.php';
+require __DIR__ . '/images.php';
+header('Cache-Control: no-store');
+header('X-Content-Type-Options: nosniff');
 
 use Dompdf\Dompdf;
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    http_response_code(405);
+    header('Allow: POST');
     exit('Accès interdit : passe par le formulaire.');
 }
 
 function champ(string $nom): string
 {
-    return trim($_POST[$nom] ?? '');
+    return isset($_POST[$nom]) && is_string($_POST[$nom]) ? trim($_POST[$nom]) : '';
 }
 
 $prenom = champ('prenom');
@@ -21,16 +27,33 @@ $age = champ('age');
 $titre = champ('titre');
 $description = champ('description');
 
+// Conserver un nom lisible, sans chemin ni caractères spéciaux de fichier.
+$nomFichier = preg_replace('/(?:\.pdf)+$/i', '', champ('nom_fichier'));
+$nomFichier = preg_replace('/[^\p{L}\p{N} _()-]+/u', '-', $nomFichier) ?? '';
+$nomFichier = trim(mb_strcut($nomFichier, 0, 180, 'UTF-8'), ' -_');
+if ($nomFichier === '') {
+    $nomFichier = 'cv';
+}
+
 $modele = champ('modele');
-$modelesAutorises = ['moderne', 'classique', 'sidebar'];
+$modelesAutorises = array_keys($modeles);
 if (!in_array($modele, $modelesAutorises, true)) {
     $modele = 'moderne';
 }
 
-$couleur = champ('couleur');
-if (!preg_match('/^#[0-9A-Fa-f]{6}$/', $couleur)) {
-    $couleur = '#1e88e5';
+// Toujours utiliser une palette connue : les titres restent contrastés même en jaune.
+$palette = $palettes['bleu'];
+foreach ($palettes as $candidate) {
+    if ($candidate[1] === champ('couleur')) {
+        $palette = $candidate;
+        break;
+    }
 }
+$couleur = $palette[1];
+$couleurClaire = $palette[2];
+$couleurTexte = $palette[4];
+// L'absence du paramètre conserve le mode recommandé (anciens formulaires inclus).
+$ats = champ('ats') !== '0';
 
 $formations = [];
 for ($i = 1; $i <= 5; $i++) {
@@ -83,19 +106,26 @@ for ($i = 1; $i <= 3; $i++) {
 }
 
 $photoData = '';
-if (isset($_FILES['photo']) && $_FILES['photo']['error'] === UPLOAD_ERR_OK) {
-    $tailleMax = 2 * 1024 * 1024;
-
-    if ($_FILES['photo']['size'] <= $tailleMax) {
-        $finfo = new finfo(FILEINFO_MIME_TYPE);
-        $mime = $finfo->file($_FILES['photo']['tmp_name']);
-        $mimesAutorises = ['image/jpeg', 'image/png'];
-
-        if (in_array($mime, $mimesAutorises, true)) {
-            $contenuImage = file_get_contents($_FILES['photo']['tmp_name']);
-            $photoData = 'data:' . $mime . ';base64,' . base64_encode($contenuImage);
+try {
+    // Si PHP a rejeté tout le POST, ne pas produire un CV vide silencieusement.
+    if (empty($_POST) && (int) ($_SERVER['CONTENT_LENGTH'] ?? 0) > 0) {
+        throw new RuntimeException('Cet envoi dépasse la configuration du serveur. Réglez upload_max_filesize à 10M et post_max_size à 16M, puis réessayez.');
+    }
+    if (!$ats) {
+        $fichier = $_FILES['photo'] ?? [];
+        if (!is_array($fichier)) throw new RuntimeException('La photo reçue n’est pas valide.');
+        $avecFichier = isset($fichier['error']) && $fichier['error'] !== UPLOAD_ERR_NO_FILE;
+        if ($avecFichier) fichierPhoto($fichier);
+        if (champ('photo_convertie') !== '') {
+            $photoData = photoPreparee(champ('photo_convertie'));
+        } elseif ($avecFichier) {
+            $photoData = jpegPhoto($fichier['tmp_name']);
         }
     }
+} catch (RuntimeException $erreur) {
+    http_response_code(422);
+    header('Content-Type: text/plain; charset=UTF-8');
+    exit($erreur->getMessage() . "\nUtilisez le bouton Retour du navigateur pour corriger la photo.");
 }
 
 ob_start();
@@ -103,9 +133,11 @@ include __DIR__ . '/cv.php';
 $html = ob_get_clean();
 
 $pdf = new Dompdf();
-$pdf->set_option('isRemoteEnabled', true);
+$pdf->set_option('isRemoteEnabled', false);
+$pdf->set_option('isFontSubsettingEnabled', true);
+$pdf->set_option('defaultFont', 'DejaVu Sans');
 $pdf->loadHtml($html, 'UTF-8');
 $pdf->setPaper('A4', 'portrait');
 $pdf->render();
-$pdf->stream('cv.pdf', ['Attachment' => true]);
+$pdf->stream($nomFichier . '.pdf', ['Attachment' => true]);
 exit;

@@ -31,52 +31,16 @@ champs.forEach(function (champ) {
 const selectModele = document.getElementById("modele");
 const carteCV = document.getElementById("previsualisation_cv");
 
-selectModele.addEventListener("change", function () {
-    carteCV.classList.remove("modele-moderne", "modele-classique", "modele-sidebar");
+function appliquerModele() {
+    Array.from(carteCV.classList).forEach(function (classe) {
+        if (classe.startsWith("modele-")) carteCV.classList.remove(classe);
+    });
     carteCV.classList.add("modele-" + selectModele.value);
-});
+}
+selectModele.addEventListener("change", appliquerModele);
 
-// 3) Changement de couleur principale
-// Chaque couleur possède : une couleur principale, deux couleurs claires et une couleur de texte.
-// On garde volontairement un objet simple pour que ce soit facile à modifier.
-const palettesCouleurs = {
-    bleu: {
-        principale: "#4fb9f5",
-        claire: "#dff5ff",
-        milieu: "#8edcff",
-        texte: "#135d9d"
-    },
-    rouge: {
-        principale: "#ff7f92",
-        claire: "#ffe5e8",
-        milieu: "#ffb8c2",
-        texte: "#a9364b"
-    },
-    orange: {
-        principale: "#ffab66",
-        claire: "#fff0dd",
-        milieu: "#ffd0a3",
-        texte: "#a85824"
-    },
-    rose: {
-        principale: "#f48cc5",
-        claire: "#ffe8f6",
-        milieu: "#ffc4e4",
-        texte: "#984878"
-    },
-    jaune: {
-        principale: "#ffd84f",
-        claire: "#fff8d8",
-        milieu: "#ffe98f",
-        texte: "#8a6a16"
-    },
-    vert: {
-        principale: "#78daa0",
-        claire: "#e4fbeb",
-        milieu: "#b8efc8",
-        texte: "#247c51"
-    }
-};
+// 3) Les mêmes palettes sont utilisées dans l'aperçu et le PDF.
+const palettesCouleurs = JSON.parse(document.getElementById("palettes-cv").textContent);
 
 function appliquerCouleur(theme) {
     const palette = palettesCouleurs[theme];
@@ -85,10 +49,10 @@ function appliquerCouleur(theme) {
         return;
     }
 
-    carteCV.style.setProperty("--couleur-cv", palette.principale);
-    carteCV.style.setProperty("--couleur-cv-clair", palette.claire);
-    carteCV.style.setProperty("--couleur-cv-milieu", palette.milieu);
-    carteCV.style.setProperty("--couleur-cv-texte", palette.texte);
+    carteCV.style.setProperty("--couleur-cv", palette[1]);
+    carteCV.style.setProperty("--couleur-cv-clair", palette[2]);
+    carteCV.style.setProperty("--couleur-cv-milieu", palette[3]);
+    carteCV.style.setProperty("--couleur-cv-texte", palette[4]);
 }
 
 const choixCouleurs = document.querySelectorAll('input[name="couleur"]');
@@ -106,29 +70,116 @@ choixCouleurs.forEach(function (choix) {
     });
 });
 
+// Le mode ATS conserve les couleurs et applique une lecture sur une colonne.
+const optionATS = document.getElementById("ats");
+function appliquerATS() {
+    carteCV.classList.toggle("mode-ats", optionATS.checked);
+    document.getElementById("conseil_ats").textContent = optionATS.checked
+        ? "Une colonne, sans photo, avec du texte sélectionnable. Le style et la couleur choisis sont conservés."
+        : "Mode visuel : la photo et les deux colonnes sont disponibles sur les modèles d’origine. Pour une candidature via un ATS, activez le mode recommandé.";
+}
+optionATS.addEventListener("change", appliquerATS);
+
 // 4) Prévisualisation de la photo de profil
 const inputPhoto = document.getElementById("photo");
 const imagePhoto = document.getElementById("photo_preview");
 const textePhoto = document.getElementById("photo_placeholder");
 
-inputPhoto.addEventListener("change", function () {
-    const fichier = inputPhoto.files[0];
+const photoConvertie = document.getElementById("photo_convertie");
+const statutPhoto = document.getElementById("photo_statut");
+const formulaireCV = document.querySelector(".cv-form");
+const boutonPDF = formulaireCV.querySelector('button[type="submit"]');
+let numeroPhoto = 0;
 
-    if (!fichier) {
-        imagePhoto.classList.add("d-none");
-        textePhoto.classList.remove("d-none");
+// N'envoyer que la version utile : le fichier original peut peser 10 Mo.
+// L'événement formdata agit sur l'envoi sans effacer la photo sélectionnée.
+formulaireCV.addEventListener("formdata", function (evenement) {
+    if (optionATS.checked) {
+        evenement.formData.delete("photo");
+        evenement.formData.delete("photo_convertie");
+    } else if (photoConvertie.value !== "") {
+        evenement.formData.delete("photo");
+    }
+});
+
+
+// Les formats affichables sont rasterisés localement : SVG compris, sans bibliothèque.
+// Le serveur prend le relais pour les formats que le navigateur ne décode pas.
+function convertirDansNavigateur(fichier) {
+    return new Promise(function (resoudre, rejeter) {
+        const url = URL.createObjectURL(fichier);
+        const image = new Image();
+        function terminer() { URL.revokeObjectURL(url); }
+        image.onload = function () {
+            try {
+                if (!image.naturalWidth || !image.naturalHeight) throw new Error("Dimensions illisibles");
+                const ratio = Math.min(1, 1000 / Math.max(image.naturalWidth, image.naturalHeight));
+                const canvas = document.createElement("canvas");
+                canvas.width = Math.max(1, Math.round(image.naturalWidth * ratio));
+                canvas.height = Math.max(1, Math.round(image.naturalHeight * ratio));
+                const contexte = canvas.getContext("2d");
+                contexte.fillStyle = "#ffffff";
+                contexte.fillRect(0, 0, canvas.width, canvas.height);
+                contexte.drawImage(image, 0, 0, canvas.width, canvas.height);
+                const jpeg = canvas.toDataURL("image/jpeg", 0.9);
+                if (!jpeg.startsWith("data:image/jpeg;base64,")) throw new Error("Conversion impossible");
+                resoudre(jpeg);
+            } catch (erreur) { rejeter(erreur); }
+            terminer();
+        };
+        image.onerror = function () { terminer(); rejeter(new Error("Format non décodable dans ce navigateur")); };
+        image.src = url;
+    });
+}
+
+inputPhoto.addEventListener("change", async function () {
+    const selection = ++numeroPhoto;
+    const erreurPhoto = document.getElementById("photo_erreur");
+    erreurPhoto.classList.add("d-none");
+    photoConvertie.value = "";
+    statutPhoto.textContent = "";
+    imagePhoto.classList.add("d-none");
+    imagePhoto.removeAttribute("src");
+    textePhoto.classList.remove("d-none");
+    boutonPDF.disabled = false;
+    const fichier = inputPhoto.files[0];
+    if (!fichier) return;
+    if (fichier.size <= 0 || fichier.size > 10 * 1024 * 1024) {
+        inputPhoto.value = "";
+        erreurPhoto.textContent = "La photo n’a pas été ajoutée. Choisissez une image de 10 Mo maximum.";
+        erreurPhoto.classList.remove("d-none");
         return;
     }
-
-    const lecteur = new FileReader();
-
-    lecteur.onload = function () {
-        imagePhoto.src = lecteur.result;
+    boutonPDF.disabled = true;
+    statutPhoto.textContent = "Préparation de la photo…";
+    try {
+        let jpeg;
+        try {
+            jpeg = await convertirDansNavigateur(fichier);
+        } catch (erreur) {
+            if (selection !== numeroPhoto) return;
+            const donnees = new FormData();
+            donnees.append("photo", fichier);
+            const reponse = await fetch("photo.php", { method: "POST", body: donnees });
+            const resultat = await reponse.json();
+            if (!reponse.ok || !resultat.photo) throw new Error(resultat.erreur || "Conversion indisponible pour cette image.");
+            jpeg = resultat.photo;
+        }
+        if (selection !== numeroPhoto) return;
+        photoConvertie.value = jpeg;
+        imagePhoto.src = jpeg;
         imagePhoto.classList.remove("d-none");
         textePhoto.classList.add("d-none");
-    };
-
-    lecteur.readAsDataURL(fichier);
+        statutPhoto.textContent = "Photo prête. Elle sera ajoutée au PDF si le mode ATS est désactivé.";
+    } catch (erreur) {
+        if (selection !== numeroPhoto) return;
+        inputPhoto.value = "";
+        statutPhoto.textContent = "";
+        erreurPhoto.textContent = "Photo non ajoutée : " + (erreur.message || "format non pris en charge sur cet hébergement.");
+        erreurPhoto.classList.remove("d-none");
+    } finally {
+        if (selection === numeroPhoto) boutonPDF.disabled = false;
+    }
 });
 
 // 5) Ajouter / supprimer des formations et expériences
@@ -148,6 +199,7 @@ function afficherElement(id) {
 
     if (element) {
         element.classList.remove("d-none");
+        element.querySelectorAll("input, textarea").forEach(function (champ) { champ.disabled = false; });
     }
 }
 
@@ -156,6 +208,7 @@ function cacherElement(id) {
 
     if (element) {
         element.classList.add("d-none");
+        element.querySelectorAll("input, textarea").forEach(function (champ) { champ.disabled = true; });
     }
 }
 
@@ -214,3 +267,22 @@ boutonsSupprimer.forEach(function (bouton) {
         supprimerBloc(section);
     });
 });
+
+// Initialisation (y compris lors d'un retour du navigateur).
+function initialiserApercu() {
+    appliquerModele();
+    appliquerATS();
+    const couleur = document.querySelector('input[name="couleur"]:checked');
+    if (couleur) {
+        appliquerCouleur(couleur.dataset.theme);
+        cartesCouleurs.forEach(function (carte) {
+            carte.classList.toggle("is-active", carte.contains(couleur));
+        });
+    }
+    champs.forEach(function (champ) { champ.dispatchEvent(new Event("input")); });
+}
+document.querySelectorAll(".section-card.d-none").forEach(function (bloc) {
+    bloc.querySelectorAll("input, textarea").forEach(function (champ) { champ.disabled = true; });
+});
+window.addEventListener("pageshow", initialiserApercu);
+initialiserApercu();

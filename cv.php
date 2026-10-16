@@ -1,224 +1,113 @@
 <?php
+// Gabarit PDF : les données sont préparées et validées dans export.php.
 function e(string $valeur): string
 {
-    return htmlspecialchars($valeur, ENT_QUOTES, 'UTF-8');
+    return htmlspecialchars($valeur, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
 }
 
 function afficherListe(array $elements): string
 {
-    if (count($elements) === 0) {
-        return '<p class="muted">Non renseigné</p>';
-    }
-
     $html = '<ul>';
     foreach ($elements as $element) {
-        $html .= '<li>' . e($element) . '</li>';
+        $html .= '<li>' . nl2br(e($element)) . '</li>';
     }
-    $html .= '</ul>';
+    return $html . '</ul>';
+}
 
+function afficherParcours(array $elements, string $champTexte): string
+{
+    $html = '';
+    foreach ($elements as $element) {
+        $dates = implode(' - ', array_filter([$element['debut'], $element['fin']], function ($date) { return $date !== ''; }));
+        $html .= '<div class="item">';
+        if ($dates !== '') $html .= '<p class="date">' . e($dates) . '</p>';
+        if ($element[$champTexte] !== '') $html .= '<p>' . nl2br(e($element[$champTexte])) . '</p>';
+        $html .= '</div>';
+    }
     return $html;
 }
 
-$nomComplet = trim($prenom . ' ' . $nom);
-if ($nomComplet === '') {
-    $nomComplet = 'Votre nom';
+function rubrique(string $titreRubrique, string $contenu): string
+{
+    return '<div class="section"><h2>' . e($titreRubrique) . '</h2>' . $contenu . '</div>';
 }
 
-$titreAffiche = $titre !== '' ? $titre : 'Titre du CV';
-$descriptionAffiche = $description !== '' ? $description : 'Courte présentation du profil.';
-$classeModele = 'cv-' . $modele;
+$nomComplet = trim($prenom . ' ' . $nom);
+$colonneUnique = $ats || !in_array($modele, ['moderne', 'classique', 'sidebar'], true);
+$profilHtml = $description !== '' ? rubrique('Profil', '<p>' . nl2br(e($description)) . '</p>') : '';
+$experiencesHtml = $experiences ? rubrique('Expériences professionnelles', afficherParcours($experiences, 'texte')) : '';
+$formationsHtml = $formations ? rubrique('Formations', afficherParcours($formations, 'titre')) : '';
+$competencesHtml = $competences ? rubrique('Compétences', afficherListe($competences)) : '';
+$languesHtml = $langues ? rubrique('Langues', afficherListe($langues)) : '';
+$interetsHtml = $centresInteret ? rubrique('Centres d’intérêt', afficherListe($centresInteret)) : '';
 ?>
 <!DOCTYPE html>
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title><?= e($titreAffiche) ?></title>
+    <title><?= e(trim($nomComplet . ' - ' . $titre, ' -')) ?></title>
     <style>
-        @page { margin: 28px; }
-        body {
-            margin: 0;
-            font-family: DejaVu Sans, sans-serif;
-            color: #1f2937;
-            font-size: 12px;
-            line-height: 1.45;
-            background: #ffffff;
-        }
-        h1, h2, h3, p { margin-top: 0; }
-        ul { margin-top: 6px; padding-left: 18px; }
-        li { margin-bottom: 4px; }
-        .cv { width: 100%; }
-        .header {
-            padding: 22px;
-            border-radius: 12px;
-            background: <?= e($couleur) ?>;
-            color: #172033;
-        }
-        .header-table { width: 100%; border-collapse: collapse; }
-        .photo-cell { width: 92px; vertical-align: top; }
-        .photo {
-            width: 74px;
-            height: 74px;
-            border-radius: 50%;
-            border: 3px solid rgba(255,255,255,0.9);
-            object-fit: cover;
-        }
-        h1 { font-size: 28px; line-height: 1.05; margin-bottom: 7px; }
-        .job-title { margin-bottom: 8px; font-weight: bold; font-size: 14px; }
-        .contact { font-size: 11px; opacity: 0.96; }
-        .section { margin-top: 18px; }
-        .section h2 {
-            margin-bottom: 9px;
-            padding-bottom: 5px;
-            border-bottom: 1.5px solid <?= e($couleur) ?>;
-            color: <?= e($couleur) ?>;
-            font-size: 15px;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-        .item { margin-bottom: 12px; }
-        .date { margin-bottom: 2px; font-weight: bold; color: #111827; }
-        .muted { color: #6b7280; }
-        .two-columns { width: 100%; border-collapse: collapse; margin-top: 18px; }
-        .left-column { width: 32%; vertical-align: top; padding-right: 18px; }
-        .right-column { width: 68%; vertical-align: top; }
-
-        .cv-classique .header {
-            border: 2px solid <?= e($couleur) ?>;
-            background: #ffffff;
-            color: #111827;
-        }
-        .cv-classique .contact { color: #4b5563; }
-        .cv-classique .photo { border-color: <?= e($couleur) ?>; }
-
-        .cv-sidebar .main-table { width: 100%; border-collapse: collapse; }
-        .cv-sidebar .sidebar-cell {
-            width: 32%;
-            padding: 20px;
-            vertical-align: top;
-            background: #eef7ff;
-        }
-        .cv-sidebar .content-cell {
-            width: 68%;
-            padding: 20px;
-            vertical-align: top;
-        }
-        .cv-sidebar .sidebar-cell h2 { font-size: 13px; }
-        .cv-sidebar .header { border-radius: 0; }
+        @page { margin: 32px 36px; }
+        body { margin: 0; font-family: DejaVu Sans, sans-serif; color: #243347; font-size: 11px; line-height: 1.45; }
+        h1, h2, p { margin-top: 0; }
+        p { margin-bottom: 7px; overflow-wrap: break-word; word-wrap: break-word; }
+        .header { padding: 19px; border-radius: 12px; background: <?= e($couleur) ?>; color: #172033; }
+        h1 { margin-bottom: 6px; font-size: 26px; line-height: 1.15; word-wrap: break-word; }
+        .job-title { margin-bottom: 8px; font-size: 13px; font-weight: bold; }
+        .contact { margin-bottom: 3px; font-size: 10px; }
+        .photo { float: right; width: 70px; height: 70px; margin: 0 0 10px 15px; border-radius: 50%; }
+        .section { margin-top: 14px; }
+        h2 { margin-bottom: 7px; padding-bottom: 4px; border-bottom: 1px solid <?= e($couleur) ?>; color: <?= e($couleurTexte) ?>; font-size: 12px; page-break-after: avoid; }
+        .item { margin-bottom: 10px; }
+        .date { margin-bottom: 2px; color: #172033; font-size: 10px; font-weight: bold; page-break-after: avoid; }
+        ul { margin: 0; padding-left: 17px; }
+        li { margin-bottom: 3px; word-wrap: break-word; }
+        .main-table { width: 100%; border-collapse: collapse; table-layout: fixed; margin-top: 14px; }
+        .sidebar-cell { width: 31%; padding-right: 16px; vertical-align: top; }
+        .content-cell { width: 69%; vertical-align: top; }
+        .cv-classique .header { border: 2px solid <?= e($couleur) ?>; background: white; }
+        .cv-sidebar .header { border-radius: 12px 12px 0 0; }
+        .cv-sidebar .sidebar-cell { padding: 14px; background: <?= e($couleurClaire) ?>; }
+        .cv-sidebar .content-cell { padding: 0 0 0 16px; }
+        .cv-epure .header { padding: 4px 0 14px; border-radius: 0; border-bottom: 3px solid <?= e($couleur) ?>; background: white; }
+        .cv-epure h2 { border: 0; }
+        .cv-elegant .header { border-left: 5px solid <?= e($couleurTexte) ?>; border-radius: 0; background: <?= e($couleurClaire) ?>; }
+        .cv-elegant h1 { font-family: DejaVu Serif, serif; }
+        .cv-professionnel .header { border-radius: 0; border-top: 6px solid <?= e($couleurTexte) ?>; background: <?= e($couleurClaire) ?>; }
+        .cv-professionnel h2 { padding: 5px 8px; border: 0; background: <?= e($couleurClaire) ?>; }
+        .cv-compact { font-size: 10px; line-height: 1.3; }
+        .cv-compact .header { padding: 12px 15px; }
+        .cv-compact h1 { font-size: 23px; }
+        .cv-compact .section { margin-top: 10px; }
+        .cv-compact .item { margin-bottom: 6px; }
+        .cv-compact h2 { margin-bottom: 5px; }
+        .cv-academique .header { padding: 4px 0 14px; border-radius: 0; border-bottom: 2px solid <?= e($couleurTexte) ?>; background: white; }
+        .cv-academique h1 { font-family: DejaVu Serif, serif; }
+        .cv-academique h2 { border-bottom: 2px solid <?= e($couleurTexte) ?>; }
+        .cv-essentiel .header { padding: 4px 0 14px 15px; border-radius: 0; border-left: 4px solid <?= e($couleur) ?>; background: white; }
+        .cv-essentiel h2 { padding-left: 9px; border: 0; border-left: 3px solid <?= e($couleur) ?>; }
     </style>
 </head>
 <body>
-    <div class="cv <?= e($classeModele) ?>">
+    <div class="cv cv-<?= e($modele) ?>">
         <div class="header">
-            <table class="header-table">
-                <tr>
-                    <?php if ($photoData !== ''): ?>
-                        <td class="photo-cell"><img src="<?= e($photoData) ?>" class="photo" alt="Photo de profil"></td>
-                    <?php endif; ?>
-                    <td>
-                        <h1><?= e($nomComplet) ?></h1>
-                        <p class="job-title"><?= e($titreAffiche) ?></p>
-                        <p class="contact">
-                            <?= e($adresse) ?>
-                            <?php if ($numero !== ''): ?> · <?= e($numero) ?><?php endif; ?>
-                            <?php if ($email !== ''): ?> · <?= e($email) ?><?php endif; ?>
-                            <?php if ($age !== ''): ?> · <?= e($age) ?> ans<?php endif; ?>
-                        </p>
-                    </td>
-                </tr>
-            </table>
+            <?php if (!$ats && $photoData !== ''): ?><img src="<?= e($photoData) ?>" class="photo" alt="Photo de profil"><?php endif; ?>
+            <?php if ($nomComplet !== ''): ?><h1><?= e($nomComplet) ?></h1><?php endif; ?>
+            <?php if ($titre !== ''): ?><p class="job-title"><?= e($titre) ?></p><?php endif; ?>
+            <?php if ($adresse !== ''): ?><p class="contact">Adresse : <?= e($adresse) ?></p><?php endif; ?>
+            <?php if ($numero !== ''): ?><p class="contact">Téléphone : <?= e($numero) ?></p><?php endif; ?>
+            <?php if ($email !== ''): ?><p class="contact">Email : <?= e($email) ?></p><?php endif; ?>
+            <?php if ($age !== ''): ?><p class="contact">Âge : <?= e($age) ?> ans</p><?php endif; ?>
+            <?php if (!$ats && $photoData !== ''): ?><div style="clear: both;"></div><?php endif; ?>
         </div>
-
-        <?php if ($modele === 'sidebar'): ?>
-            <table class="main-table">
-                <tr>
-                    <td class="sidebar-cell">
-                        <div class="section">
-                            <h2>Compétences</h2>
-                            <?= afficherListe($competences) ?>
-                        </div>
-                        <div class="section">
-                            <h2>Langues</h2>
-                            <?= afficherListe($langues) ?>
-                        </div>
-                        <div class="section">
-                            <h2>Centres d'intérêts</h2>
-                            <?= afficherListe($centresInteret) ?>
-                        </div>
-                    </td>
-                    <td class="content-cell">
-                        <div class="section">
-                            <h2>Profil</h2>
-                            <p><?= nl2br(e($descriptionAffiche)) ?></p>
-                        </div>
-                        <div class="section">
-                            <h2>Formations</h2>
-                            <?php foreach ($formations as $formation): ?>
-                                <div class="item">
-                                    <p class="date"><?= e($formation['debut']) ?> - <?= e($formation['fin']) ?></p>
-                                    <p><?= e($formation['titre']) ?></p>
-                                </div>
-                            <?php endforeach; ?>
-                            <?php if (count($formations) === 0): ?><p class="muted">Non renseigné</p><?php endif; ?>
-                        </div>
-                        <div class="section">
-                            <h2>Expériences professionnelles</h2>
-                            <?php foreach ($experiences as $experience): ?>
-                                <div class="item">
-                                    <p class="date"><?= e($experience['debut']) ?> - <?= e($experience['fin']) ?></p>
-                                    <p><?= nl2br(e($experience['texte'])) ?></p>
-                                </div>
-                            <?php endforeach; ?>
-                            <?php if (count($experiences) === 0): ?><p class="muted">Non renseigné</p><?php endif; ?>
-                        </div>
-                    </td>
-                </tr>
-            </table>
+        <?php if ($colonneUnique): ?>
+            <?= $profilHtml . $experiencesHtml . $formationsHtml . $competencesHtml . $languesHtml . $interetsHtml ?>
         <?php else: ?>
-            <div class="section">
-                <h2>Profil</h2>
-                <p><?= nl2br(e($descriptionAffiche)) ?></p>
-            </div>
-
-            <table class="two-columns">
-                <tr>
-                    <td class="left-column">
-                        <div class="section">
-                            <h2>Compétences</h2>
-                            <?= afficherListe($competences) ?>
-                        </div>
-                        <div class="section">
-                            <h2>Langues</h2>
-                            <?= afficherListe($langues) ?>
-                        </div>
-                        <div class="section">
-                            <h2>Centres d'intérêts</h2>
-                            <?= afficherListe($centresInteret) ?>
-                        </div>
-                    </td>
-                    <td class="right-column">
-                        <div class="section">
-                            <h2>Formations</h2>
-                            <?php foreach ($formations as $formation): ?>
-                                <div class="item">
-                                    <p class="date"><?= e($formation['debut']) ?> - <?= e($formation['fin']) ?></p>
-                                    <p><?= e($formation['titre']) ?></p>
-                                </div>
-                            <?php endforeach; ?>
-                            <?php if (count($formations) === 0): ?><p class="muted">Non renseigné</p><?php endif; ?>
-                        </div>
-                        <div class="section">
-                            <h2>Expériences professionnelles</h2>
-                            <?php foreach ($experiences as $experience): ?>
-                                <div class="item">
-                                    <p class="date"><?= e($experience['debut']) ?> - <?= e($experience['fin']) ?></p>
-                                    <p><?= nl2br(e($experience['texte'])) ?></p>
-                                </div>
-                            <?php endforeach; ?>
-                            <?php if (count($experiences) === 0): ?><p class="muted">Non renseigné</p><?php endif; ?>
-                        </div>
-                    </td>
-                </tr>
-            </table>
+            <?= $modele !== 'sidebar' ? $profilHtml : '' ?>
+            <table class="main-table"><tr>
+                <td class="sidebar-cell"><?= $competencesHtml . $languesHtml . $interetsHtml ?></td>
+                <td class="content-cell"><?= ($modele === 'sidebar' ? $profilHtml : '') . $experiencesHtml . $formationsHtml ?></td>
+            </tr></table>
         <?php endif; ?>
     </div>
 </body>
